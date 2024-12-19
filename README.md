@@ -27,14 +27,14 @@ A sophisticated desktop application for creating smooth face morphing animations
 1. Clone this repository
 2. Install required dependencies:
 ```bash
-pip install opencv-python mediapipe PyQt5 numpy scipy
+pip install -r requirements.txt
 ```
 
 ## Usage
 
 1. Run the application:
 ```bash
-python image_morph_app.py
+python main.py
 ```
 
 2. Add faces to the timeline using the "Add Face" button
