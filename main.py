@@ -14,6 +14,7 @@ from PyQt5.QtGui import QImage, QPixmap, QIcon
 import os
 import logging
 import absl.logging
+from ascii_colors import ASCIIColors, trace_exception
 
 # Disable logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -112,6 +113,12 @@ class TimelineItemWidget(QFrame):
         settings_btn = QPushButton("⚙")
         settings_btn.clicked.connect(self.show_settings)
         layout.addWidget(settings_btn)
+        # Delete button
+        delete_btn = QPushButton("×")
+        delete_btn.setFixedSize(30, 30)
+        delete_btn.clicked.connect(lambda: self.deleted.emit(self.index))
+        layout.addWidget(delete_btn)
+
         
     def update_thumbnail(self):
         if self.item.image is not None:
@@ -145,9 +152,11 @@ class FaceSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         
         # Image preview with landmarks
-        preview = QLabel()
-        preview.setFixedSize(400, 400)
-        layout.addWidget(preview)
+        self.preview = QLabel()
+        self.preview.setFixedSize(400, 400)
+        layout.addWidget(self.preview)
+
+        self.update_preview(self.face_item.image)
         
         # Settings form
         form = QFormLayout()
@@ -171,6 +180,19 @@ class FaceSettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def update_preview(self, img):
+        """Update the preview label with the given image"""
+        if img is None:
+            return
+            
+        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        h, w, c = rgb_img.shape
+        bytes_per_line = 3 * w
+        qt_img = QImage(rgb_img.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(qt_img)
+        scaled_pixmap = pixmap.scaled(self.preview_label.size(), Qt.KeepAspectRatio)
+        self.preview.setPixmap(scaled_pixmap)
 
         
 class TimelineWidget(QWidget):
@@ -196,8 +218,7 @@ class TimelineWidget(QWidget):
         scroll.setWidget(container)
         layout.addWidget(scroll)
         
-    def add_face(self):
-        item = TimelineItem()
+    def add_face(self, item):
         self.items.append(item)
         self.add_timeline_item_widget(len(self.items) - 1, item)
         self.items_changed.emit()        
@@ -375,6 +396,7 @@ class TimelineMorphThread(QThread):
             self.finished.emit()
 
         except Exception as e:
+            trace_exception(e)
             if self.out is not None:
                 self.out.release()
             self.error.emit(str(e))
@@ -544,6 +566,7 @@ class ImageMorphApp(QMainWindow):
                         if item.image is not None:
                             item.points = self.detect_face_landmarks(item.image)
                 except Exception as e:
+                    trace_exception(e)
                     QMessageBox.warning(self, "Error", str(e))
 
     def load_face(self):
@@ -572,7 +595,7 @@ class ImageMorphApp(QMainWindow):
                 item.points = self.detect_face_landmarks(img)
                 item.name = os.path.basename(file_name)
                 
-                self.timeline.add_face()
+                self.timeline.add_face(item)
                 self.timeline.items[-1] = item
                 self.timeline.timeline_layout.itemAt(len(self.timeline.items)-1).widget().update_thumbnail()
                 
@@ -580,6 +603,7 @@ class ImageMorphApp(QMainWindow):
                 self.update_preview(self.draw_landmarks(img, item.points))
                 
             except Exception as e:
+                trace_exception(e)
                 QMessageBox.warning(self, "Error", str(e))
 
     def update_ui_state(self):
